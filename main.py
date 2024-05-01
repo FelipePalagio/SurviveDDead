@@ -7,6 +7,7 @@ from third_person_controller import ThirdPersonController
 from ursina.shaders import colored_lights_shader
 from direct.actor.Actor import Actor
 import time
+
 app = Ursina()
 
 random.seed(0)
@@ -15,14 +16,14 @@ ground = Entity(model='plane', collider='box', scale=64, texture='grass', textur
 
 editor_camera = EditorCamera(enabled=False, ignore_paused=True)
 player = ThirdPersonController(z=-10, color=color.orange, origin_y=-.5, speed=8, collider='box')
-player.collider = BoxCollider(player, Vec3(0, 1, 0), Vec3(1, 2, 1))
+player.collider = BoxCollider(player, Vec3(0, 1, 0), Vec3(1, 2.8000001907348633, 1))
 actor = Actor("alex/alex.glb")
 actor.reparent_to(player)
 actor.setH(180)
 actor.setScale(2, 2, 2)
 
-gun = Entity(parent=player, position=(0, 0, 0), on_cooldown=False)
-gun.muzzle_flash = Entity(parent=gun, z=1, world_scale=.5, model='quad', color=color.yellow, enabled=False)
+gun = Entity(model="cube", parent=player, position=(0, 20, 0), on_cooldown=False)
+# gun.muzzle_flash = Entity(parent=player, world_scale=.5, position=(-.2, 3, 2), model='quad', color=color.yellow, enabled=False)
 
 shootables_parent = Entity()
 mouse.traverse_target = shootables_parent
@@ -43,18 +44,24 @@ class TheCreator:
         self.aniname = aniname
         self.state = 0
 
-
     def anime_control(self):
         return actor.getAnimControl(self.aniname)
 
     def upper(self):
         if self.state < 10:
-            self.state += .5
+            if self.aniname == "shoot":
+                self.state += 10
+            else:
+                self.state += .5
         self.effct_control()
 
     def downr(self):
+
         if self.state >= .5:
-            self.state -= .5
+            if self.aniname == "shoot":
+                self.state -= 1
+            else:
+                self.state -= .5
         self.effct_control()
 
     def effct_control(self):
@@ -63,37 +70,47 @@ class TheCreator:
 
 animation_data = []
 for animation in actor.getAnimNames():
-
     animation_data.append(TheCreator(animation))
 
-
 print(actor.getAnimNames())
+
+
 def animate(x):
     for data in animation_data:
         actor.enableBlend()
         if x == data.aniname:
             data.upper()
             if data.anime_control().isPlaying():
+                if not third_person_controller.aim_mode:
+                    player.rotation_x = 0
+                    player.y = 0
                 if data.aniname == "walkleft":
                     player.speed = 1.8
                 if data.aniname == "walkright":
                     player.speed = 1.8
                 if data.aniname == "walk":
+                    player.speed = 4
+                if data.aniname == "back":
                     player.speed = 3.5
-                if data.aniname == "walkback":
+                if data.aniname == "gunback":
                     player.speed = 2
+                if data.aniname == "aim":
+                    if player.camera_pivot.rotation_x > 19:
+                        player.camera_pivot.rotation_x = 20
+                    if player.camera_pivot.rotation_x < 20:
+                        player.rotation_x = player.camera_pivot.rotation_x
                 if data.aniname == "run":
+                    third_person_controller.aim_mode = False
                     player.speed = 8
-                if data.aniname == "runpistol":
+                if data.aniname == "rungun":
                     player.speed = 6
-                if data.aniname == "pistolwalkleft":
+                if data.aniname == "gunleft":
                     player.speed = 1.8
-                if data.aniname == "pistolwalkright":
+                if data.aniname == "gunright":
                     player.speed = 1.8
-                if data.aniname == "walkpistol":
+                if data.aniname == "gunwalk":
                     player.speed = 3.5
-                if data.aniname == "pistolwalkback":
-                    player.speed = 2
+
             else:
                 data.anime_control().loop(data.anime_control())
 
@@ -135,12 +152,13 @@ def update():
                     if not held_keys["s"]:
                         if not held_keys["d"]:
                             if not held_keys["a"]:
-                                animate('aim')
+                                if not held_keys["left mouse"]:
+                                    animate('aim')
         if held_keys['w']:
             if not held_keys["shift"]:
                 animate("gunwalk")
             if held_keys["shift"]:
-                animate("rungun")
+                animate("run")
 
         if held_keys['d']:
             animate("gunright")
@@ -154,7 +172,8 @@ def update():
                 if not held_keys["s"]:
                     if not held_keys["d"]:
                         if not held_keys["a"]:
-                            animate('idle')
+                            if not held_keys["left mouse"]:
+                                animate('idle')
 
         if held_keys["w"]:
             if not held_keys["shift"]:
@@ -168,28 +187,25 @@ def update():
         if held_keys["d"]:
             animate("walkright")
 
-
-    if held_keys["2"]:
-        transition_to_aim = True
-        transition_to_rest = False
-        pistol = True
-    if held_keys["1"]:
+    if not held_keys['right mouse']:
         transition_to_aim = False
         transition_to_rest = True
         pistol = False
-    if held_keys['left mouse']:
-        shoot()
+
+    if held_keys['right mouse']:
+        transition_to_aim = True
+        transition_to_rest = False
+        pistol = True
+        if held_keys['left mouse']:
+            shoot()
 
 
 def shoot():
     if not gun.on_cooldown:
+        Audio('shoot.mp3')
+        animate('shoot')
         gun.on_cooldown = True
-        gun.muzzle_flash.enabled = True
-        from ursina.prefabs.ursfx import ursfx
-        ursfx([(0.0, 0.0), (0.1, 0.9), (0.15, 0.75), (0.3, 0.14), (0.6, 0.0)], volume=0.5, wave='noise',
-              pitch=random.uniform(-13, -12), pitch_change=-12, speed=3.0)
-        invoke(gun.muzzle_flash.disable, delay=.05)
-        invoke(setattr, gun, 'on_cooldown', False, delay=.15)
+        invoke(setattr, gun, 'on_cooldown', False, delay=.5)
         if mouse.hovered_entity and hasattr(mouse.hovered_entity, 'hp'):
             mouse.hovered_entity.hp -= 10
             mouse.hovered_entity.blink(color.red)
@@ -214,7 +230,7 @@ class Enemy(Entity):
         self.health_bar.alpha = max(0, self.health_bar.alpha - time.dt)
 
         self.look_at_2d(player.position, 'y')
-        hit_info = raycast(self.world_position + Vec3(0, 1, 0), self.forward, 30, ignore=(self,))
+        hit_info = raycast(self.world_position + Vec3(0, 1, 0), self.forward, 30, ignore=(self, ))
         # print(hit_info.entity)
         if hit_info.entity == player:
             if dist > 2:
@@ -236,7 +252,7 @@ class Enemy(Entity):
 
 
 # Enemy()
-# enemies = [Enemy(x=x*4) for x in range(4)]
+#enemies = [Enemy(x=x*4) for x in range(4)]
 
 
 def pause_input(key):
@@ -257,5 +273,4 @@ pause_handler = Entity(ignore_paused=True, input=pause_input)
 sun = DirectionalLight()
 sun.look_at(Vec3(1, -1, -1))
 Sky()
-
 app.run()
